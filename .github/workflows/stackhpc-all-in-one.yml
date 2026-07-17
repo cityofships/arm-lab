@@ -23,6 +23,10 @@ on:
         description: Host OS release
         type: string
         default: '9'
+      architecture:
+        description: Host architecture
+        type: string
+        default: x86_64
       ssh_username:
         description: User for terraform to access the all-in-one VM
         type: string
@@ -126,14 +130,14 @@ jobs:
       - name: Output image tag
         id: image_tag
         run: |
-          echo image_tag=$(grep stackhpc_${{ inputs.os_distribution }}_$(sed s/-/_/ <(echo "${{ inputs.os_release }}"))_overcloud_host_image_version: etc/kayobe/pulp-host-image-versions.yml | awk '{print $2}') >> $GITHUB_OUTPUT
+          echo image_tag=$(grep stackhpc_${{ inputs.os_distribution }}_$(sed s/-/_/ <(echo "${{ inputs.os_release }}"))_overcloud_host_image_version${{ inputs.architecture == 'aarch64' && '_aarch64' || '' }}: etc/kayobe/pulp-host-image-versions.yml | awk '{print $2}') >> $GITHUB_OUTPUT
 
       # Use the image override if set, otherwise use overcloud-os_distribution-os_release-tag
       - name: Output image name
         id: image_name
         run: |
           if [ -z "${{ inputs.vm_image_override }}" ]; then
-            echo image_name=overcloud-${{ inputs.os_distribution }}-${{ inputs.os_release }}-${{ steps.image_tag.outputs.image_tag }} >> $GITHUB_OUTPUT
+            echo image_name=overcloud-${{ inputs.os_distribution }}-${{ inputs.os_release }}${{ inputs.architecture == 'aarch64' && '-aarch64' || '' }}-${{ steps.image_tag.outputs.image_tag }} >> $GITHUB_OUTPUT
           else
             echo image_name=${{ inputs.vm_image_override }} >> $GITHUB_OUTPUT
           fi
@@ -164,19 +168,19 @@ jobs:
           aio_vm_interface = "${{ env.VM_INTERFACE }}"
           aio_vm_name = "${{ env.VM_NAME }}"
           aio_vm_image = "${{ env.VM_IMAGE }}"
-          aio_vm_flavor = "${{ vars.HOST_IMAGE_BUILD_FLAVOR }}"
-          aio_vm_network = "${{ vars.HOST_IMAGE_BUILD_NETWORK }}"
-          aio_vm_subnet = "${{ vars.HOST_IMAGE_BUILD_SUBNET }}"
+          aio_vm_flavor = "${{ vars.AIO_FLAVOR }}"
+          aio_vm_network = "${{ vars.AIO_NETWORK }}"
+          aio_vm_subnet = "${{ vars.AIO_SUBNET }}"
           aio_vm_volume_size = "${{ env.VM_VOLUME_SIZE }}"
           aio_vm_tags = ${{ env.VM_TAGS }}
           EOF
         working-directory: ${{ github.workspace }}/terraform/aio
         env:
           SSH_USERNAME: "${{ inputs.ssh_username }}"
-          VM_NAME: "skc-ci-aio-${{ inputs.neutron_plugin }}-${{ github.run_id }}"
+          VM_NAME: "skc-ci-aio-${{ inputs.architecture }}-${{ inputs.neutron_plugin }}-${{ github.run_id }}"
           VM_IMAGE: ${{ steps.image_name.outputs.image_name }}
           VM_INTERFACE: ${{ inputs.vm_interface }}
-          VM_VOLUME_SIZE: ${{ inputs.upgrade && '75' || '50' }}
+          VM_VOLUME_SIZE: ${{ inputs.upgrade && '100' || '50' }}
           VM_TAGS: '["skc-ci-aio", "PR=${{ github.event.number }}"]'
 
       - name: Terraform Plan
@@ -245,9 +249,11 @@ jobs:
           ---
           os_distribution: ${{ env.OS_DISTRIBUTION }}
           os_release: "${{ env.OS_RELEASE }}"
+          kolla_base_arch: ${{ env.ARCHITECTURE }}
           kolla_enable_ovn: ${{ env.ENABLE_OVN }}
           EOF
         env:
+          ARCHITECTURE: ${{ inputs.architecture }}
           ENABLE_OVN: ${{ inputs.neutron_plugin == 'ovn' }}
           OS_DISTRIBUTION: ${{ inputs.os_distribution }}
           OS_RELEASE: ${{ inputs.os_release }}
@@ -479,12 +485,19 @@ jobs:
         id: diagnostics
         run: |
           mkdir -p diagnostics
+          # Depending on when the failure happened, the diagnostics playbook
+          # may be in different locations.
+          if [ -f etc/kayobe/ansible/tools/diagnostics.yml ]; then
+            DIAGNOSTICS_PLAYBOOK='$KAYOBE_CONFIG_PATH/ansible/tools/diagnostics.yml'
+          else
+            DIAGNOSTICS_PLAYBOOK='$KAYOBE_CONFIG_PATH/ansible/diagnostics.yml'
+          fi
           sudo -E docker run -t --rm \
             -v $(pwd):/stack/kayobe-automation-env/src/kayobe-config \
             -v $(pwd)/diagnostics:/stack/diagnostics \
             -e KAYOBE_ENVIRONMENT -e KAYOBE_VAULT_PASSWORD -e KAYOBE_AUTOMATION_SSH_PRIVATE_KEY \
             $KAYOBE_IMAGE \
-            /stack/kayobe-automation-env/src/kayobe-config/.automation/pipeline/playbook-run.sh '$KAYOBE_CONFIG_PATH/ansible/tools/diagnostics.yml'
+            /stack/kayobe-automation-env/src/kayobe-config/.automation/pipeline/playbook-run.sh "$DIAGNOSTICS_PLAYBOOK"
         env:
           KAYOBE_AUTOMATION_SSH_PRIVATE_KEY: ${{ steps.ssh_key.outputs.ssh_key }}
         if: ${{ !cancelled() && steps.tf_apply.outcome == 'success' }}
@@ -492,7 +505,7 @@ jobs:
       - name: Upload test result artifacts
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
-          name: test-results-${{ inputs.os_distribution }}-${{ inputs.os_release }}-${{ inputs.neutron_plugin }}${{ inputs.upgrade && '-upgrade' || '' }}
+          name: test-results-${{ inputs.os_distribution }}-${{ inputs.os_release }}-${{ inputs.architecture }}-${{ inputs.neutron_plugin }}${{ inputs.upgrade && '-upgrade' || '' }}
           path: |
             diagnostics/
             tempest-artifacts/

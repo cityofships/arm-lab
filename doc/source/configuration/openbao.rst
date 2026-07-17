@@ -30,7 +30,7 @@ OpenBao/Hashicorp Vault may also be used as the secret store for Barbican.
     To configure Hashicorp Vault instead set ``stackhpc_ca_secret_store: vault``,
     then follow the instruction.
 
-    Currently the migration path from Hashicorp Vault to OpenBao is in development
+    Migration method can be found at :ref:`Hashicorp Vault to OpenBao migration <vault-bao-migration>`
 
 Background
 ==========
@@ -520,7 +520,7 @@ Enable Barbican in kayobe
 
 1. Set the following in kayobe-config/etc/kayobe/kolla.yml or if environments are being used etc/kayobe/environments/$KAYOBE_ENVIRONMENT/kolla.yml
 
-   .. code-block::yml
+   .. code-block:: yaml
 
       kolla_enable_barbican: yes
 
@@ -530,7 +530,7 @@ Generate secrets_barbican_approle_secret_id
 1. Run ``uuidgen`` to generate secret id
 2. Insert into secrets.yml or if environments are being used etc/kayobe/environments/$KAYOBE_ENVIRONMENT/secrets.yml
 
-   .. code-block::yml
+   .. code-block:: yaml
 
       secrets_barbican_approle_secret_id: "YOUR-SECRET-GOES-HERE"
 
@@ -548,7 +548,7 @@ Add secrets_barbican_approle_id to secrets
 
 1. Note the role id from playbook output and insert into secrets.yml or if environments are being used etc/kayobe/environments/$KAYOBE_ENVIRONMENT/secrets.yml
 
-   .. code-block::yml
+   .. code-block:: yaml
 
       secrets_barbican_approle_role_id: "YOUR-APPROLE-ID-GOES-HERE"
 
@@ -580,3 +580,27 @@ Deploy Barbican
    .. code-block:: bash
 
       kayobe overcloud service deploy -kt barbican
+
+.. _vault-bao-migration:
+
+Hashicorp Vault to OpenBao Migration
+====================================
+
+You can migrate your secret store from Vault to OpenBao by using a playbook.
+
+.. code-block:: bash
+
+   kayobe playbook run $KAYOBE_CONFIG_PATH/ansible/secret-store/vault-bao-migration-all.yml
+
+The playbook runs three playbooks that can be run separately.
+
+1. Migrate seed Vault to OpenBao - ``$KAYOBE_CONFIG_PATH/ansible/secret-store/vault-bao-migration-seed.yml``
+2. Migrate overcloud Vault to OpenBao - ``$KAYOBE_CONFIG_PATH/ansible/secret-store/vault-bao-migration-overcloud.yml``
+3. Automatically update SKC to target OpenBao - ``$KAYOBE_CONFIG_PATH/ansible/secret-store/vault-bao-migration-change-config.yml``
+
+Seed migration is a single node migration and API calls to seed secret store can be disrupted.
+However, end users of OpenStack will not be affected.
+
+Overcloud migration is HA migration and no downtime is expected.
+
+It is recommended to run ``vault-bao-migration-change-config.yml`` after all Vault deployments have been migrated to OpenBao.
