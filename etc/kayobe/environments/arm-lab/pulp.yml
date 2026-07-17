@@ -1,3 +1,6 @@
 ---
 stackhpc_release_pulp_username: "{{ secrets_stackhpc_release_pulp_username }}"
 stackhpc_release_pulp_password: "{{ secrets_stackhpc_release_pulp_password }}"
+
+stackhpc_pulp_rpm_architectures:
+  - aarch64
