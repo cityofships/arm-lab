@@ -1,4 +1,4 @@
 ---
 aio_ips:
-  deployer: 172.16.1.135
-  aio-seed-01: 172.16.0.173
+  arm-deployer: 172.16.1.32
+  arm-seed: 172.16.1.243

@@ -6,10 +6,10 @@
 localhost ansible_connection=local
 
 [seed-hypervisor]
-deployer
+arm-deployer
 
 [seed]
-aio-seed-01
+arm-seed
 
 [controllers]
 # Add controller nodes here if required. These hosts will provide the
